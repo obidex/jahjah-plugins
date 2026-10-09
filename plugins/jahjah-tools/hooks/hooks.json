@@ -1,0 +1,4 @@
+{
+  "description": "Owner-authorized routine tool approvals, diagnostics, and attribution preference",
+  "modules": ["./register.js"]
+}
