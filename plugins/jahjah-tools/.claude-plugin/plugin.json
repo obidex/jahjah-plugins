@@ -1,6 +1,21 @@
 {
   "name": "jahjah-tools",
-  "description": "Jahjah's own commands and helpers",
-  "version": "0.1.0",
-  "author": { "name": "Obada" }
+  "description": "Jahjah's commands, read-only log helper, and routine-work permission mod",
+  "version": "0.2.0",
+  "author": { "name": "Obada" },
+  "userConfig": {
+    "approval_mode": {
+      "type": "string",
+      "title": "Routine approvals",
+      "description": "Approve supported routine work automatically, or turn this mod's approvals off. Existing deny rules and managed controls remain in force.",
+      "options": ["routine", "off"],
+      "default": "routine"
+    },
+    "repositories": {
+      "type": "string",
+      "title": "Authorized repositories",
+      "description": "Comma-separated owner/repo names. Only these GitHub repositories receive automatic approvals.",
+      "default": "obidex/jahjah-internal,obidex/jahjah-website,obidex/infra,obidex/roadmap,obidex/harness-kit,obidex/harness-hands,obidex/jahjah-plugins"
+    }
+  }
 }
