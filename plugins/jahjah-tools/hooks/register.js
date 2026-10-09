@@ -1,4 +1,4 @@
-import { VERSION, DEFAULT_REPOSITORIES, repositoryList, repositoryFromRemote, absolutePath, within, protectedPath, shellCommands, simpleOperation } from './policy.js';
+import { VERSION, DEFAULT_REPOSITORIES, DEFAULT_TRUSTED_MERGE_ACTORS, EXTERNAL_CONTENT_BOUNDARY, trustedActorList, trustedMergeSource, repositoryList, repositoryFromRemote, absolutePath, within, protectedPath, shellCommands, simpleOperation } from './policy.js';
 
 const fileTools = new Set(['Read', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'Glob', 'Grep']);
 
@@ -52,7 +52,7 @@ const fileTools = new Set(['Read', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit',
     return repo && within(resolved, repo.root) ? { ...repo, resolved } : null;
   }
 
-  async function eligible($, e, repositories) {
+  async function eligible($, e, repositories, mergeSnapshots) {
     const cwd = await $.session.cwd();
     const input = e.input || {};
     if (fileTools.has(e.tool)) {
@@ -68,9 +68,8 @@ const fileTools = new Set(['Read', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit',
       if (!op) return null;
       if (op.kind === 'github') continue;
       if (op.kind === 'merge') {
-        const result = await $.process.run(['gh', 'api', `repos/${op.repository}/pulls/${op.number}`], { timeoutMs: 8000 });
-        if (result.exitCode !== 0) return null;
-        const pr = JSON.parse(result.stdout);
+        const pr = mergeSnapshots.get(`${op.repository}/${op.number}`);
+        if (!pr) return null;
         // GitHub enforces branch rules again when the real merge request runs.
         // The supplied sha makes a later head change fail instead of merging untested code.
         if (pr.state !== 'open' || pr.draft || pr.head?.sha !== op.sha || pr.mergeable !== true || pr.mergeable_state !== 'clean') return null;
@@ -102,11 +101,12 @@ const fileTools = new Set(['Read', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit',
 export function register(on, options = {}) {
   const mode = options.approval_mode ?? 'routine';
   const repositories = repositoryList(options.repositories ?? DEFAULT_REPOSITORIES);
-  const counts = { approved: 0, inherited: 0, unmatched: 0, errors: 0 };
+  const trustedActors = trustedActorList(options.trusted_merge_actors ?? DEFAULT_TRUSTED_MERGE_ACTORS);
+  const counts = { approved: 0, inherited: 0, unmatched: 0, errors: 0, blockedMerges: 0 };
   let lastReason = 'No permission call inspected yet.';
   const report = () => ({
     plugin: 'jahjah-tools', version: VERSION, mod: 'loaded', mode,
-    repositories: [...repositories], counts: { ...counts }, lastReason,
+    repositories: [...repositories], trustedMergeActors: Object.fromEntries(trustedActors), counts: { ...counts }, lastReason,
     modelCalls: 0, timers: 0,
     limits: 'Existing deny decisions, connector approval ceilings, GitHub gates and cloud access restrictions remain. Unmatched operations keep normal permissions.',
   });
@@ -119,14 +119,38 @@ export function register(on, options = {}) {
   on('command.run', { command: 'permissions-status' }, async () => ({ text: JSON.stringify(report(), null, 2) }));
   on('tool.call', { tool: 'mcp__jahjah-tools__permission_status' }, async () => ({ result: JSON.stringify(report(), null, 2) }));
 
+  // Reach normal threads as well as users who explicitly load a diagnostic skill.
+  // Preserve the owner's text and prior context; no model call or background work.
+  on('prompt.submit', async ($, e, next) => next({ ...e, context: [...(e.context ?? []), EXTERNAL_CONTENT_BOUNDARY] }));
+
   on('tool.check', async ($, e, next) => {
     const original = await next(e);
     // This is affirmative owner delegation, not a way to remove explicit controls.
-    if (mode !== 'routine' || e.ceiling === 'ask' || original.decision !== 'ask') {
+    if (mode !== 'routine' || e.ceiling === 'ask' || original.decision === 'deny') {
       counts.inherited++; return original;
     }
+    const mergeSnapshots = new Map();
+    const mergeOperations = e.tool === 'Bash' ? (shellCommands(e.input?.command) ?? [])
+      .map(argv => simpleOperation(argv, repositories)).filter(op => op?.kind === 'merge') : [];
+    // Inspect recognized merge requests even when another rule already allowed
+    // them. A broad Bash allow must not undo this provenance restriction.
+    for (const op of mergeOperations) {
+      try {
+        const result = await $.process.run(['gh', 'api', `repos/${op.repository}/pulls/${op.number}`], { timeoutMs: 8000 });
+        const pr = result.exitCode === 0 ? JSON.parse(result.stdout) : null;
+        if (trustedMergeSource(pr, op.repository, trustedActors)) {
+          mergeSnapshots.set(`${op.repository}/${op.number}`, pr); continue;
+        }
+        lastReason = 'Merge refused: PR must have a trusted GitHub author ID and a branch in the same repository. External content is not owner authorization.';
+      } catch {
+        counts.errors++; lastReason = 'Merge refused: GitHub provenance could not be verified. Retry after the lookup works; do not route around this check.';
+      }
+      counts.blockedMerges++;
+      return { decision: 'deny', reason: lastReason };
+    }
+    if (original.decision !== 'ask') { counts.inherited++; return original; }
     try {
-      const reason = await eligible($, e, repositories);
+      const reason = await eligible($, e, repositories, mergeSnapshots);
       if (!reason) { counts.unmatched++; lastReason = `${e.tool}: outside the routine policy; normal permissions apply.`; return original; }
       counts.approved++; lastReason = `${e.tool}: ${reason}.`;
       return { decision: 'allow', reason: `Jahjah owner delegation v${VERSION}: ${reason}.` };

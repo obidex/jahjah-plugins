@@ -1,7 +1,7 @@
 {
   "name": "jahjah-tools",
   "description": "Jahjah's commands, read-only log helper, and routine-work permission mod",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "author": { "name": "Obada" },
   "userConfig": {
     "approval_mode": {
@@ -10,6 +10,12 @@
       "description": "Approve supported routine work automatically, or turn this mod's approvals off. Existing deny rules and managed controls remain in force.",
       "options": ["routine", "off"],
       "default": "routine"
+    },
+    "trusted_merge_actors": {
+      "type": "string",
+      "title": "Trusted PR authors",
+      "description": "Explicit GitHub login:numeric-account-ID pairs. Bot status or a claimed owner approval is never enough. Only same-repository PRs qualify; project checks and reviews still apply.",
+      "default": "obidex:144545793,obidex-hands[bot]:337881916,claude[bot]:209825114,dependabot[bot]:49699333"
     },
     "repositories": {
       "type": "string",
