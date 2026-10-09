@@ -1,0 +1,11 @@
+{
+  "name": "jahjah",
+  "owner": { "name": "Obada" },
+  "plugins": [
+    {
+      "name": "jahjah-tools",
+      "source": "./plugins/jahjah-tools",
+      "description": "Jahjah's own commands and helpers"
+    }
+  ]
+}
