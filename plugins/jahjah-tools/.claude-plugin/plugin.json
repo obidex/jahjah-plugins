@@ -1,7 +1,7 @@
 {
   "name": "jahjah-tools",
   "description": "Jahjah's commands, read-only log helper, and routine-work permission mod",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "author": { "name": "Obada" },
   "userConfig": {
     "approval_mode": {

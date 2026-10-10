@@ -1,5 +1,5 @@
 // Pure policy: no tools execute here. An unmatched command keeps Claude's decision.
-export const VERSION = '0.2.2';
+export const VERSION = '0.2.3';
 export const DEFAULT_REPOSITORIES = 'obidex/jahjah-internal,obidex/jahjah-website,obidex/infra,obidex/roadmap,obidex/harness-kit,obidex/harness-hands,obidex/jahjah-plugins';
 // GitHub account IDs, verified from PR API metadata, not commit names or body text.
 export const DEFAULT_TRUSTED_MERGE_ACTORS = 'obidex:144545793,obidex-hands[bot]:337881916,claude[bot]:209825114,dependabot[bot]:49699333';

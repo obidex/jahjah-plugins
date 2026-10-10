@@ -43,7 +43,7 @@ test('cloud startup registers a real status tool and returns the loaded version'
   expect(tools).toContain('permission_status');
   const result = await $.tool.call({ tool: 'mcp__jahjah-tools__permission_status' });
   const status = JSON.parse(result.result);
-  expect(status.version).toBe('0.2.2');
+  expect(status.version).toBe('0.2.3');
   expect(status.mod).toBe('loaded');
   expect(status.modelCalls).toBe(0);
   expect(status.timers).toBe(0);

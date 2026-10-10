@@ -1,6 +1,6 @@
 # Jahjah plugins
 
-`jahjah-tools` **0.2.2** contains four skills, one bounded read-only helper,
+`jahjah-tools` **0.2.3** contains four skills, one bounded read-only helper,
 and one Claude Code mod. It adds no schedule, watcher, service or model call
 for permission decisions.
 
@@ -19,18 +19,23 @@ for permission decisions.
   separate outcomes and the last 20 decisions. Seeing a skill is not proof the mod loaded.
 - **No automatic Claude attribution:** applies to newly composed attribution,
   without rewriting authors, commits or existing credit.
-- **silver-plate:** complete, minimal owner actions; no unnecessary confirmation.
+- **silver-plate:** complete, minimal owner actions; A/B choices only for genuine
+  owner decisions. Technical dependencies stay assigned to agents.
 - **code-words:** the canonical roadmap issue, read once per task using REST
   rather than cloud-incompatible GitHub GraphQL commands.
 - **xray:** evidence-qualified reports, including deployed versus rehearsed results.
-- **permissions:** distinguishes unnecessary prompts from real access or policy
-  failures and checks the loaded mod before claiming success.
+- **permissions:** diagnoses the failing worker's actual result, prevents repeated
+  diagnostic loops, and separates routine technical work from mandatory approvals.
 - **log-reader:** Haiku, low effort, four turns, `Read`/`Grep`/`Glob` only. The parent
   supplies logs. No Bash, editing, remote calls or background polling.
 
+Version 0.2.3 refines these two skills; it does not broaden permission approvals
+or override a classifier refusal. New guidance is not proof that an existing
+blocked task has completed.
+
 ## Update and prove it loaded
 
-Update the installed `jahjah-tools` plugin to **0.2.2** through its existing
+Update the installed `jahjah-tools` plugin to **0.2.3** through its existing
 source. In Claude Code Projects, select it in **Project settings → Plugins**
 and use a **new cloud thread**. Project settings changes do not update running
 threads. A repository's `enabledPlugins` entry is not cloud installation.
@@ -51,7 +56,7 @@ mode and approval counts. Do not infer that the mod loaded from its skills.
 ```
 
 The real tool is `mcp__jahjah-tools__permission_status`. It must return
-`version: 0.2.2`, `mod: loaded`, and `mode: routine`. It also reports trusted
+`version: 0.2.3`, `mod: loaded`, and `mode: routine`. It also reports trusted
 merge actor IDs and `blockedMerges`. Then perform the next
 already-authorized routine action and check that `approved` increases when
 the engine would otherwise ask. A zero count can simply mean the engine
