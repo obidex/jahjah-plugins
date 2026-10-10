@@ -70,14 +70,14 @@ test('GitHub writes stay in named repositories without file uploads or query amb
 });
 
 function setup({ options = {}, remote = 'https://github.com/obidex/jahjah-internal.git', pushRemote = remote, cwd = ROOT, mergeable = 'clean', sha = SHA, broken = false, links = {}, pr = VALID_PR } = {}) {
-  const handlers = [], inspected = [], files = new Set([ROOT, ROOT + '/src', ROOT + '/scripts', ROOT + '/scripts/replay-check.sh', ROOT + '/package.json', '/work/other', '/work/other/src']);
+  const handlers = [], inspected = [], files = new Set([ROOT, ROOT + '/src', ROOT + '/scripts', ROOT + '/scripts/replay-check.sh', ROOT + '/package.json', ROOT + '/docs', ROOT + '/docs/STRATEGIST.md', ROOT + '/README.md', ROOT + '/docs/with space.md', '/work/other', '/work/other/src']);
   register((event, matcher, fn) => { if (typeof matcher === 'function') { fn = matcher; matcher = {}; } handlers.push({ event, matcher, fn }); return { catch() {} }; }, options);
   const api = {
     session: { cwd: async () => cwd },
     fs: { stat: async path => {
       if (links[path]) return links[path];
       if (!files.has(path)) throw new Error('ENOENT');
-      return { realPath: path, kind: /\.(?:json|sh)$/.test(path) ? 'file' : 'dir', isLink: false };
+      return { realPath: path, kind: /\.(?:json|sh|md)$/.test(path) ? 'file' : 'dir', isLink: false };
     } },
     process: { run: async argv => {
       inspected.push(argv); if (broken) throw new Error('unavailable');
@@ -196,6 +196,86 @@ test('external-content rule is supplied without altering the owner message or pr
 test('path normalization respects directory boundaries', () => {
   assert.equal(absolutePath('../other/a', ROOT), '/work/other/a');
   assert.equal(within(ROOT + '-evil/a', ROOT), false);
+});
+
+test('inspection grammar accepts bounded file reads without general-purpose sed or streaming', () => {
+  for (const command of [
+    'sed -n 25,40p docs/STRATEGIST.md', 'sed -n 1p -- README.md',
+    'cat README.md', "cat 'docs/with space.md'", 'head -n 20 README.md',
+    'tail -n 10 -- README.md', 'wc -l README.md', 'wc -w README.md', 'wc -c README.md',
+  ]) assert.ok(classify(command)?.every(Boolean), command);
+  for (const command of [
+    'sed -i s/a/b/ README.md', "sed -n '1e touch sentinel' README.md",
+    "sed -n '1w sentinel' README.md", "sed -n '1r /etc/passwd' README.md",
+    "sed -n '1p;1e id' README.md", 'sed -n -f program README.md',
+    'sed -n 1p', 'sed -n 1p -', 'sed -n 1p --help', 'cat -', 'cat',
+    'cat -- -', 'cat -- --help', 'head -c 20 README.md', 'tail -f README.md',
+    'tail -n +1 README.md', 'tail --pid=1 README.md', 'wc --files0-from=/tmp/list',
+    'cat README.md > /tmp/copy', 'cat README.md | sh',
+  ]) assert.ok(!classify(command)?.every(Boolean), command);
+});
+
+test('mixed preparation and numeric sed reads receive an approval without execution', async () => {
+  const h = setup();
+  const command = `cd ${ROOT} && git fetch -q origin main && git checkout -q -B claude/task origin/main && git log --oneline -1 && sed -n 25,40p docs/STRATEGIST.md`;
+  assert.equal((await h.check({ tool: 'Bash', input: { command } })).decision, 'allow');
+  assert.equal((await h.status()).lastDecision.category, 'approved');
+  assert.ok(h.inspected.every(a => a[0] === 'git' && (a.includes('rev-parse') || a.includes('config'))));
+});
+
+test('inspection requires regular existing files in the current verified repository', async () => {
+  const h = setup({ links: {
+    [ROOT + '/docs/outside.md']: { isLink: true, realPath: '/etc/passwd', kind: 'file' },
+    [ROOT + '/docs/credential.md']: { isLink: true, realPath: ROOT + '/.env', kind: 'file' },
+    [ROOT + '/docs/pipe']: { isLink: false, realPath: ROOT + '/docs/pipe', kind: 'other' },
+  } });
+  for (const path of ['README.md', 'docs/STRATEGIST.md'])
+    assert.equal((await h.check({ tool: 'Bash', input: { command: `sed -n 1,4p ${path}` } })).decision, 'allow');
+  for (const path of ['../other/file.md', '/etc/passwd', '.env', '.git/config', 'server.key', 'docs', 'missing.md', 'docs/outside.md', 'docs/credential.md', 'docs/pipe']) {
+    assert.equal((await h.check({ tool: 'Bash', input: { command: `cat ${path}` } })).decision, 'ask', path);
+    assert.equal((await h.status()).lastDecision.code, 'inspection-file-not-eligible');
+  }
+});
+
+test('diagnostics distinguish inherited allow, denial, ceiling, disabled mode and policy miss', async () => {
+  const h = setup(), e = { tool: 'Bash', input: { command: 'npm test' } };
+  await h.check(e, { decision: 'allow' });
+  assert.equal((await h.status()).lastDecision.category, 'already-allowed');
+  const denied = { decision: 'deny', reason: '[Self-Modification] secret text never retained' };
+  assert.deepEqual(await h.check(e, denied), denied);
+  assert.equal((await h.status()).lastDecision.category, 'existing-denial');
+  assert.equal((await h.status()).lastDecision.ruleLabel, 'Self-Modification');
+  assert.equal((await h.status()).counts.blockedMerges, 0);
+  assert.equal((await h.status()).counts.inheritedDeny, 1);
+  await h.check({ ...e, ceiling: 'ask' });
+  assert.equal((await h.status()).lastDecision.category, 'approval-ceiling');
+  const off = setup({ options: { approval_mode: 'off' } });
+  await off.check(e);
+  assert.equal((await off.status()).lastDecision.category, 'approvals-disabled');
+  await h.check({ tool: 'Bash', input: { command: "git status && sed -n '1e id' README.md" } });
+  assert.deepEqual((await h.status()).lastDecision, {
+    sequence: 4, tool: 'Bash', category: 'unmatched', originalDecision: 'ask', finalDecision: 'ask',
+    code: 'unsupported-command-form', commandIndex: 2, command: 'sed', ruleLabel: null,
+  });
+  assert.equal((await h.status()).counts.inheritedAllow, 1);
+  assert.equal((await h.status()).counts.approvalCeilings, 1);
+  const broken = setup({ broken: true }); await broken.check(e);
+  assert.equal((await broken.status()).lastDecision.category, 'inspection-error');
+  const proxy = setup({ remote: 'https://proxy.example/obidex/jahjah-internal' }); await proxy.check(e);
+  assert.equal((await proxy.status()).lastDecision.code, 'repository-not-verified');
+});
+
+test('bounded diagnostics never retain arguments or denial text and status does not overwrite them', async () => {
+  const h = setup();
+  for (let n = 0; n < 25; n++)
+    await h.check({ tool: 'Bash', input: { command: "git status && secret-token-value 'private-file-name'" } });
+  await h.check({ tool: 'Bash', input: { command: 'npm test' } }, { decision: 'deny', reason: 'secret-denial-text [unknown-sensitive-label]' });
+  const before = await h.status();
+  await h.check({ tool: 'mcp__jahjah-tools__permission_status', input: {} });
+  assert.deepEqual(await h.status(), before);
+  assert.equal(before.recentDecisions.length, 20);
+  assert.equal(before.recentDecisions.at(-1).sequence, 26);
+  assert.doesNotMatch(JSON.stringify(before), /secret-token-value|private-file-name|secret-denial-text|unknown-sensitive-label/);
 });
 
 test('package version and agent capabilities match the shipped feature', async () => {

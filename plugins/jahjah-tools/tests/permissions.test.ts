@@ -4,7 +4,7 @@ const ROOT = '/work/jahjah-internal';
 
 function repositoryStubs(on) {
   on('session.cwd', () => ({ value: ROOT }));
-  on('fs.stat', ($, e) => ({ value: { realPath: e.path, kind: 'dir', isLink: false, size: 0, mtimeMs: 0 } }));
+  on('fs.stat', ($, e) => ({ value: { realPath: e.path, kind: e.path.endsWith('.md') ? 'file' : 'dir', isLink: false, size: 0, mtimeMs: 0 } }));
   on('process.run', ($, e) => {
     const a = e.argv;
     expect(a[0]).toBe('git');
@@ -43,7 +43,7 @@ test('cloud startup registers a real status tool and returns the loaded version'
   expect(tools).toContain('permission_status');
   const result = await $.tool.call({ tool: 'mcp__jahjah-tools__permission_status' });
   const status = JSON.parse(result.result);
-  expect(status.version).toBe('0.2.1');
+  expect(status.version).toBe('0.2.2');
   expect(status.mod).toBe('loaded');
   expect(status.modelCalls).toBe(0);
   expect(status.timers).toBe(0);
@@ -80,4 +80,39 @@ test('native merge path refuses an outsider on an internal branch', async ($, on
 test('new attribution is empty without touching any existing commit', async ($) => {
   const result = await $.attribution.text({ kind: 'commit' });
   expect(result.text).toBe('');
+});
+
+test('native compound preparation with numeric sed is approved, with an honest diagnostic', async ($, on) => {
+  repositoryStubs(on);
+  on('tool.check', () => ({ decision: 'ask' }));
+  const result = await $.tool.check({ tool: 'Bash', input: { command: `cd ${ROOT} && git fetch -q origin main && git checkout -q -B claude/task origin/main && git log --oneline -1 && sed -n 25,40p docs/STRATEGIST.md` } });
+  expect(result.decision).toBe('allow');
+  const status = JSON.parse((await $.tool.call({ tool: 'mcp__jahjah-tools__permission_status' })).result);
+  expect(status.lastDecision.category).toBe('approved');
+  expect(status.lastDecision.originalDecision).toBe('ask');
+  expect(status.lastDecision.finalDecision).toBe('allow');
+});
+
+test('native diagnostic identifies the unsupported component without printing its arguments', async ($, on) => {
+  repositoryStubs(on);
+  on('tool.check', () => ({ decision: 'ask' }));
+  expect((await $.tool.check({ tool: 'Bash', input: { command: "git status && sed -n '1w secret-output-path' README.md" } })).decision).toBe('ask');
+  const report = (await $.tool.call({ tool: 'mcp__jahjah-tools__permission_status' })).result;
+  const status = JSON.parse(report);
+  expect(status.lastDecision.commandIndex).toBe(2);
+  expect(status.lastDecision.command).toBe('sed');
+  expect(status.lastDecision.code).toBe('unsupported-command-form');
+  expect(report.includes('secret-output-path')).toBe(false);
+});
+
+test('native deny is counted separately from merge blocks and survives status reads', async ($, on) => {
+  on('tool.check', () => ({ decision: 'deny', reason: '[Self-Modification] private details' }));
+  expect((await $.tool.check({ tool: 'Edit', input: { file_path: 'CLAUDE.md' } })).decision).toBe('deny');
+  const before = JSON.parse((await $.tool.call({ tool: 'mcp__jahjah-tools__permission_status' })).result);
+  await $.tool.check({ tool: 'mcp__jahjah-tools__permission_status', input: {} });
+  const after = JSON.parse((await $.tool.call({ tool: 'mcp__jahjah-tools__permission_status' })).result);
+  expect(after).toEqual(before);
+  expect(after.counts.inheritedDeny).toBe(1);
+  expect(after.counts.blockedMerges).toBe(0);
+  expect(after.lastDecision.ruleLabel).toBe('Self-Modification');
 });

@@ -1,5 +1,5 @@
 // Pure policy: no tools execute here. An unmatched command keeps Claude's decision.
-export const VERSION = '0.2.1';
+export const VERSION = '0.2.2';
 export const DEFAULT_REPOSITORIES = 'obidex/jahjah-internal,obidex/jahjah-website,obidex/infra,obidex/roadmap,obidex/harness-kit,obidex/harness-hands,obidex/jahjah-plugins';
 // GitHub account IDs, verified from PR API metadata, not commit names or body text.
 export const DEFAULT_TRUSTED_MERGE_ACTORS = 'obidex:144545793,obidex-hands[bot]:337881916,claude[bot]:209825114,dependabot[bot]:49699333';
@@ -182,10 +182,32 @@ export function githubOperation(argv, repositories) {
   return mutations[method]?.some(re => re.test(route)) ? { kind: 'github', method, repository: match[1], route } : null;
 }
 
+// Only explicit files, with no stdin, option injection or executable sed program.
+// File existence, type, symlinks and repository boundaries are checked by the mod.
+export function inspectionOperation(argv) {
+  const [verb, ...args] = argv;
+  let paths;
+  if (verb === 'sed') {
+    if (args[0] !== '-n' || !/^[1-9][0-9]*(?:,[1-9][0-9]*)?p$/.test(args[1] || '')) return null;
+    paths = args.slice(2);
+  } else if (verb === 'cat') paths = args;
+  else if (verb === 'head' || verb === 'tail') {
+    if (args[0] !== '-n' || !/^[1-9][0-9]*$/.test(args[1] || '')) return null;
+    paths = args.slice(2);
+  } else if (verb === 'wc') {
+    if (!['-l', '-w', '-c'].includes(args[0])) return null;
+    paths = args.slice(1);
+  } else return null;
+  if (paths[0] === '--') paths = paths.slice(1);
+  if (!paths.length || paths.length > 8 || paths.some(p => !p || p.startsWith('-') || /[\0\r\n]/.test(p))) return null;
+  return { kind: 'inspect', paths };
+}
+
 export function simpleOperation(argv, repositories) {
   if (argv[0] === 'cd' && argv.length === 2) return { kind: 'cd', directory: argv[1] };
   if (argv[0] === 'git') return gitOperation(argv);
   if (argv[0] === 'gh') return githubOperation(argv, repositories);
+  if (['sed', 'cat', 'head', 'tail', 'wc'].includes(argv[0])) return inspectionOperation(argv);
   // Run existing project scripts, not inline interpreters or downloaded programs.
   if (['bash', 'sh', 'node', 'python', 'python3'].includes(argv[0]) && /^(?:\.\/)?(?:scripts|tools|\.harness\/tools)\/[\w./-]+\.(?:sh|mjs|cjs|js|py)$/.test(argv[1] || ''))
     return { kind: 'script', path: argv[1] };
