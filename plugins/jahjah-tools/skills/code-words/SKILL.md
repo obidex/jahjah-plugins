@@ -1,6 +1,6 @@
 ---
 name: code-words
-description: Resolve Jahjah's explicit shorthand such as silver plate, x-ray, morning check, pay, ready and I trust you from the owner's canonical definitions. Use for an intended command, not an incidental word or quoted example.
+description: Resolve Jahjah's explicit shorthand such as silver plate, x-ray, morning check, pay, ready, I trust you and autopilot from the owner's canonical definitions. Use for an intended command, not an incidental word or quoted example.
 ---
 The source is https://github.com/obidex/roadmap/issues/42. Read its body through the connected GitHub reader, or use this REST command in Claude Code:
 
