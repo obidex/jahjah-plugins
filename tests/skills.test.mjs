@@ -30,6 +30,17 @@ test('code-words names autopilot and keeps its incidental-use rule', async () =>
   assert.match(body, /Do not copy the canonical definitions/);
 });
 
+test('code-words names its read routes in order and ends in "do nothing" when all fail', async () => {
+  const { body } = await read('code-words');
+  const routes = ['gh api repos/obidex/roadmap/issues/42', "connected GitHub reader's issue read", "connected GitHub reader's issue search"].map(r => body.indexOf(r));
+  assert.ok(routes.every((at, i) => at > 0 && (i === 0 || at > routes[i - 1])), 'routes in order');
+  assert.match(body, /If every route fails, do nothing on the word/);
+  assert.match(body, /name each route tried with its exact refusal/);
+  assert.match(body, /Never act on a remembered, guessed or partial meaning/);
+  assert.match(body, /Do not request a new token, add a repository or widen any access/);
+  assert.ok(!/gh issue view repos|gh issue view 42/.test(body), 'no GraphQL command');
+});
+
 test('autopilot takes its definition from the canonical issue and copies none of it', async () => {
   const { meta, body } = await read('autopilot');
   assert.match(meta.description, /owner himself types/);
