@@ -70,3 +70,11 @@ test('plugin version matches the README', async () => {
   const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8');
   assert.ok(readme.includes(`\`jahjah-tools\` **${plugin.version}**`));
 });
+
+test('every skill passes the runbook linter: numbered steps, a command and a check per step, a failure table', async () => {
+  const { lint } = await import('./lib/steps.mjs');
+  for (const name of (await readdir(SKILLS)).sort()) {
+    const { problems } = lint(await readFile(new URL(`${name}/SKILL.md`, SKILLS), 'utf8'));
+    assert.deepEqual(problems, [], name);
+  }
+});
