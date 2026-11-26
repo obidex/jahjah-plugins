@@ -1,6 +1,6 @@
 # Jahjah plugins
 
-`jahjah-tools` **0.2.5** contains five skills, one bounded read-only helper,
+`jahjah-tools` **0.2.6** contains five skills, one bounded read-only helper,
 and one Claude Code mod. It adds no schedule, watcher, service or model call
 for permission decisions.
 
@@ -33,15 +33,15 @@ for permission decisions.
 - **log-reader:** Haiku, low effort, four turns, `Read`/`Grep`/`Glob` only. The parent
   supplies logs. No Bash, editing, remote calls or background polling.
 
-Version 0.2.5 names code-words' read routes in order and what to do when none works
-(0.2.4 added the autopilot skill). It changes no permission rule; under `hooks/` only the version
+Version 0.2.6 reshapes the five skills into numbered steps, each with a command and a check, plus a
+failure table, and tests them with the runbook linter (0.2.5 named code-words' read routes). It changes no permission rule; under `hooks/` only the version
 literal moved, as the version test requires. It does not
 broaden permission approvals or override a classifier refusal. New guidance is not proof that an existing
 blocked task has completed.
 
 ## Update and prove it loaded
 
-Update the installed `jahjah-tools` plugin to **0.2.5** through its existing
+Update the installed `jahjah-tools` plugin to **0.2.6** through its existing
 source. In Claude Code Projects, select it in **Project settings → Plugins**
 and use a **new cloud thread**. Project settings changes do not update running
 threads. A repository's `enabledPlugins` entry is not cloud installation.
@@ -62,7 +62,7 @@ mode and approval counts. Do not infer that the mod loaded from its skills.
 ```
 
 The real tool is `mcp__jahjah-tools__permission_status`. It must return
-`version: 0.2.5`, `mod: loaded`, and `mode: routine`. It also reports trusted
+`version: 0.2.6`, `mod: loaded`, and `mode: routine`. It also reports trusted
 merge actor IDs and `blockedMerges`. Then perform the next
 already-authorized routine action and check that `approved` increases when
 the engine would otherwise ask. A zero count can simply mean the engine
